@@ -55,7 +55,7 @@ Copy code
 [OpenAI 공식 웹사이트](https://www.openai.com/)
 이미지 삽입하기 (Images):
 이미지를 삽입하려면 ![대체 텍스트](이미지 URL) 형식을 사용합니다. 이미지 URL은 로컬 파일 경로일 수도 있고, 외부 이미지 URL일 수도 있습니다. 예를 들어:
-![OpenAI 로고](https://openai.com/favicon.ico)
+![OpenAI 로고](https://openai.com/favicon.ico) 이렇게 하기도 하고 이미지 폴더를 만들어 그 안에 이미지를 넣고 git add . 해줘도 됩니다.
 
 
 
