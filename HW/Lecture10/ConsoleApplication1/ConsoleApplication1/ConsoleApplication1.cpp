@@ -38,7 +38,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 
 int setVertexRotation(float x, float y, float angle_degree, float cx, float cy, float r, float g, float b)
 {
-    glColor3f(r, g, b);
+    glColor3ub(r, g, b);
     glVertex2f(cx + (x * cos(angle_degree) - y * sin(angle_degree)), cy + (x * sin(angle_degree) + y * cos(angle_degree)));
     return 0;
 }
@@ -83,10 +83,10 @@ int render()
 
     glBegin(GL_QUADS);
     // 사각형 그리기 (자체 회전 포함)
-    setVertexRotation(-0.04f, -0.04f, angle_square_self, square_center_x, square_center_y, 0.0f, 0.0f, 1.0f);
-    setVertexRotation(0.04f, -0.04f, angle_square_self, square_center_x, square_center_y, 0.0f, 0.0f, 1.0f);
-    setVertexRotation(0.04f, 0.04f, angle_square_self, square_center_x, square_center_y, 0.0f, 0.0f, 1.0f);
-    setVertexRotation(-0.04f, 0.04f, angle_square_self, square_center_x, square_center_y, 0.0f, 0.0f, 1.0f);
+    setVertexRotation(-0.04f, -0.04f, angle_square_self, square_center_x, square_center_y, 91,155,213);
+    setVertexRotation(0.04f, -0.04f, angle_square_self, square_center_x, square_center_y, 91, 155, 213);
+    setVertexRotation(0.04f, 0.04f, angle_square_self, square_center_x, square_center_y, 91, 155, 213);
+    setVertexRotation(-0.04f, 0.04f, angle_square_self, square_center_x, square_center_y, 91, 155, 213);
     glEnd();
 
     // 별의 중심 좌표
@@ -109,31 +109,31 @@ int render()
 
     glBegin(GL_TRIANGLES);
     // 별 그리기
-    setVertexRotation(-0.05f, 0.04f, angle_star, star_center_x, star_center_y, 1.0f, 1.0f, 0.0f); // 파란색
-    setVertexRotation(0.02f, 0.04f, angle_star, star_center_x, star_center_y, 1.0f, 1.0f, 0.0f); // 파란색
-    setVertexRotation(0.04f, -0.03f, angle_star, star_center_x, star_center_y, 1.0f, 1.0f, 0.0f); // 파란색
-    setVertexRotation(0.05f, 0.04f, angle_star, star_center_x, star_center_y, 1.0f, 1.0f, 0.0f); // 파란색
-    setVertexRotation(-0.02f, 0.04f, angle_star, star_center_x, star_center_y, 1.0f, 1.0f, 0.0f); // 파란색
-    setVertexRotation(-0.04f, -0.03f, angle_star, star_center_x, star_center_y, 1.0f, 1.0f, 0.0f); // 파란색
-    setVertexRotation(0.0f, 0.08f, angle_star, star_center_x, star_center_y, 1.0f, 1.0f, 0.0f); // 파란색
-    setVertexRotation(-0.03f, 0.0f, angle_star, star_center_x, star_center_y, 1.0f, 1.0f, 0.0f); // 파란색
-    setVertexRotation(0.03f, 0.0f, angle_star, star_center_x, star_center_y, 1.0f, 1.0f, 0.0f); // 파란색
+    setVertexRotation(-0.05f, 0.04f, angle_star, star_center_x, star_center_y, 255,242,0); // 파란색
+    setVertexRotation(0.02f, 0.04f, angle_star, star_center_x, star_center_y, 255, 242, 0); // 파란색
+    setVertexRotation(0.04f, -0.03f, angle_star, star_center_x, star_center_y, 255, 242, 0); // 파란색
+    setVertexRotation(0.05f, 0.04f, angle_star, star_center_x, star_center_y, 255, 242, 0); // 파란색
+    setVertexRotation(-0.02f, 0.04f, angle_star, star_center_x, star_center_y, 255, 242, 0); // 파란색
+    setVertexRotation(-0.04f, -0.03f, angle_star, star_center_x, star_center_y, 255, 242, 0); // 파란색
+    setVertexRotation(0.0f, 0.08f, angle_star, star_center_x, star_center_y, 255, 242, 0); // 파란색
+    setVertexRotation(-0.03f, 0.0f, angle_star, star_center_x, star_center_y, 255, 242, 0); // 파란색
+    setVertexRotation(0.03f, 0.0f, angle_star, star_center_x, star_center_y, 255, 242, 0); // 파란색
     glEnd();
  
     // 큰 원의 중심 좌표
     float big_circle_center_x = 0.0f;
     float big_circle_center_y = 0.0f;
 
-    glLineWidth(20.0f);
+    glLineWidth(10.0f);
     glBegin(GL_LINE_LOOP);
     for (float angle = 0; angle <= 360; angle += 1) {
-        setVertexRotation(0.4, 0.4, angle + angle_circle, big_circle_center_x, big_circle_center_y, 1.0f, 0.5f, 0.0f); // 회전 각도 적용
+        setVertexRotation(0.4, 0.4, angle + angle_circle, big_circle_center_x, big_circle_center_y, 214,127,42); // 회전 각도 적용
     }
     glEnd();
     // 큰 원 그리기
     glBegin(GL_TRIANGLE_FAN);
     for (float angle = 0; angle <= 360; angle += 1) {
-        setVertexRotation(0.4, 0.4, angle + angle_circle, big_circle_center_x, big_circle_center_y, 1.0f, 0.749f, 0.0f); // 회전 각도 적용
+        setVertexRotation(0.4, 0.4, angle + angle_circle, big_circle_center_x, big_circle_center_y, 255,217,102); // 회전 각도 적용
     }
     glEnd();
 
@@ -147,7 +147,7 @@ int render()
 
     glBegin(GL_TRIANGLE_FAN);
     for (float angle = 0; angle <= 360; angle += 1) {
-        setVertexRotation(0.1, 0.1, angle + angle_circle, rotated_small_circle_center_x, rotated_small_circle_center_y, 1.0f, 0.812f, 0.251f); // 회전 각도 적용
+        setVertexRotation(0.1, 0.1, angle + angle_circle, rotated_small_circle_center_x, rotated_small_circle_center_y,255,230,153); // 회전 각도 적용
     }
     glEnd();
 
@@ -161,7 +161,7 @@ int render()
 
     glBegin(GL_TRIANGLE_FAN);//angle이 각
     for (float angle = 0; angle <= 360; angle += 1) {
-        setVertexRotation2(0.1, 0.1, angle + angle_circle, rotated_small_circle_center_x, rotated_small_circle_center_y, 1.0f, 0.875f, 0.0f); // 회전 각도 적용
+        setVertexRotation2(0.1, 0.1, angle + angle_circle, rotated_small_circle_center_x, rotated_small_circle_center_y, 255,192,0); // 회전 각도 적용
     }
     glEnd();
 
