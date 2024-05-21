@@ -63,7 +63,7 @@ float circle_radius_square = 0.8f; // 사각형이 도는 원의 반지름
 const float rotationSpeed_square_self = 2 * PI / 6000; // 100초에 한 바퀴
 const float rotationSpeed_square_orbit = 2 * PI / 36000; // 10분에 한 바퀴
 const float rotationSpeed_star = 2 * PI / 1800; // 30초에 한 바퀴
-const float rotationSpeed_circle = 2 * PI / 1800;
+const float rotationSpeed_circle = 2 * PI / 18000;//300초
 
 int render()
 {
