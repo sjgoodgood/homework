@@ -1,297 +1,267 @@
 ﻿#pragma comment(lib, "OpenGL32.lib")
+
 #include <GLFW/glfw3.h>
 #include <iostream>
-#include <chrono>
+#include "object.h"
+#include "Transform.h"
 
-const float playerSize = 0.1f; // 50cm 변환
-const float groundHeight = 0.1f; // 100cm 변환
+// 화면 크기
+const int WIDTH = 800;
+const int HEIGHT = 600;
 
-float PlayerY = -1.0f + groundHeight; // 플레이어의 초기 위치 (지면 위)
-float PlayerJumpSpeed = 0.0f;
-const float maxJumpSpeed = 10.0f; // 최대 점프 속도
-const float gravity = -9.8f; // 중력 가속도
+// 장애물 수
+const int MAX_OBSTACLES = 2;
+const int MAX_STARS = 5; // 별 수
+
+// 중력 가속도
+const float GRAVITY = -9.8f; // 중력 가속도
+
+// 플레이어 점프 속도
+const float MAX_JUMP_FORCE = 15.0f;
+
+// 플레이어 상태
 bool isJumping = false;
-bool isFalling = false; // 하강 중인지 여부
-bool isSpacePressed = false;
-const float speedIncrement = 5.0f; // 점프 속도 증가량
+float playerVelocityY = 0.0f;
+double spacebarPressedTime = 0.0;
+bool spacebarHeld = false;
 
-bool isRightKeyPressed = false;
-const float normalSpeed = 1.0f;
-const float fastSpeed = 2.0f;
-float obstacleSpeed = normalSpeed; // 장애물 이동 속도
-float obstacleAcceleration = 0.0f;
-const float accelerationIncrement = 0.5f; // 가속도 증가량
+// 전역 변수로 플레이어 선언
+Player player(0.0f, 0.0f, 0.1f, 0.1f, 1.0f, 0.0f, 0.0f);
 
-bool isCollision = false; // 충돌 상태 확인
-
-unsigned int seed = 123456789; // 초기 시드 값
-
-float lowObstacleX1 = 0.8f;
-float lowObstacleX2 = 1.2f;
-float highObstacleX1 = 1.0f;
-float highObstacleX2 = 1.4f;
-
-float randomFloat(float min, float max) {
-    seed = (1103515245 * seed + 12345) % (1 << 31);
-    float random = static_cast<float>(seed) / (1 << 31);
-    return min + random * (max - min);
+// 미터 좌표를 픽셀 좌표로 변환하는 함수
+float meterToPixel(float meter) {
+    return meter * 10.0f; // 1 cm = 10 pixels
 }
 
-void errorCallback(int error, const char* description)
-{
-    std::cerr << "GLFW Error: " << description << std::endl;
+// 픽셀 좌표를 OpenGL 좌표로 변환하는 함수
+float pixelToOpenGL(float pixel, float screenSize) {
+    return (2.0f * pixel / screenSize) - 1.0f;
 }
 
-void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-    {
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
+void errorCallback(int error, const char* description) {
+    printf("GLFW Error: %s", description);
+}
+
+void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS && !isJumping) {
+        spacebarPressedTime = glfwGetTime();
+        spacebarHeld = true;
     }
-    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS && !isJumping && !isCollision) // 스페이스바를 누르면 점프 시작
-    {
-        isJumping = true; // 점프 상태로 설정
-        isFalling = false; // 하강 상태 해제
-        PlayerJumpSpeed = 2.0f; // 초기 점프 속도 설정
-        isSpacePressed = true; // 스페이스바 눌림 상태 설정
-    }
-    if (key == GLFW_KEY_SPACE && action == GLFW_RELEASE) // 스페이스바를 떼면
-    {
-        isSpacePressed = false; // 스페이스바 눌림 상태 해제
-    }
-    if (key == GLFW_KEY_RIGHT && action == GLFW_PRESS) // 오른쪽 방향키를 누르면
-    {
-        isRightKeyPressed = true;
-    }
-    if (key == GLFW_KEY_RIGHT && action == GLFW_RELEASE) // 오른쪽 방향키를 떼면
-    {
-        isRightKeyPressed = false;
+    if (key == GLFW_KEY_SPACE && action == GLFW_RELEASE && !isJumping) {
+        double spacebarReleasedTime = glfwGetTime();
+        double heldTime = spacebarReleasedTime - spacebarPressedTime;
+        float jumpForce = (heldTime * 15.0f < MAX_JUMP_FORCE) ? (heldTime * 15.0f) : MAX_JUMP_FORCE;  // 최대 점프력을 제한
+        playerVelocityY = jumpForce;
+        isJumping = true;
+        spacebarHeld = false;
+        player.rotationSpeed = -180.0f / (2 * jumpForce / -GRAVITY); // 점프 동안 180도 반대 방향으로 회전
     }
 }
 
-void PlayerMove(float deltaTime)
-{
-    if (isCollision) return; // 충돌 시 움직임 멈춤
+void reshape(GLFWwindow* window, int width, int height) {
+    glViewport(0, 0, width, height);
 
-    if (isSpacePressed && isJumping && !isFalling) // 스페이스바가 눌린 상태에서 점프 중이고 하강 중이 아니면
-    {
-        PlayerJumpSpeed += speedIncrement * deltaTime; // 점프 속도 증가
-        if (PlayerJumpSpeed > maxJumpSpeed) // 최대 점프 속도 제한
-        {
-            PlayerJumpSpeed = maxJumpSpeed;
-        }
+    float aspectRatio = (float)width / (float)height;
+    float left, right, bottom, top, near = -1.0f, far = 1.0f;
+
+    if (aspectRatio > 1.0f) {
+        // Wider than tall
+        left = -aspectRatio;
+        right = aspectRatio;
+        bottom = -1.0f;
+        top = 1.0f;
+    }
+    else {
+        // Taller than wide
+        left = -1.0f;
+        right = 1.0f;
+        bottom = -1.0f / aspectRatio;
+        top = 1.0f / aspectRatio;
     }
 
-    PlayerJumpSpeed += gravity * deltaTime;  // 중력 적용
-    PlayerY += PlayerJumpSpeed * deltaTime;  // 속도를 위치에 적용
+    float orthoMatrix[16] = {
+        2.0f / (right - left), 0.0f, 0.0f, 0.0f,
+        0.0f, 2.0f / (top - bottom), 0.0f, 0.0f,
+        0.0f, 0.0f, -2.0f / (far - near), 0.0f,
+        -(right + left) / (right - left), -(top + bottom) / (top - bottom), -(far + near) / (far - near), 1.0f
+    };
 
-    if (PlayerJumpSpeed < 0) // 상향 속도가 0보다 작아지면 하강 상태로 전환
-    {
-        isFalling = true;
-    }
+    glMatrixMode(GL_PROJECTION);
+    glLoadMatrixf(orthoMatrix);
 
-    if (PlayerY <= -1.0f + groundHeight)
-    {
-        PlayerY = -1.0f + groundHeight; // 바닥에 닿았을 때 위치 고정
-        PlayerJumpSpeed = 0.0f; // 속도 제거
-        isJumping = false; // 점프 상태 해제
-        isFalling = false; // 하강 상태 해제
-    }
+    glMatrixMode(GL_MODELVIEW);
 }
 
-void updateObstacleSpeed(float deltaTime)
-{
-    if (isCollision) return; // 충돌 시 움직임 멈춤
+void ApplyPhysics(Player& player, Floor& ground, float deltaTime) {
+    if (isJumping) {
+        playerVelocityY += GRAVITY * deltaTime; // 중력 가속도 적용 
+        player.y += playerVelocityY * deltaTime; // y 위치 업데이트
+        player.rotationAngle += player.rotationSpeed * deltaTime; // 회전 각도 업데이트
 
-    if (isRightKeyPressed)
-    {
-        obstacleAcceleration += accelerationIncrement * deltaTime; // 가속도 증가
-        if (obstacleSpeed < fastSpeed)
-        {
-            obstacleSpeed += obstacleAcceleration * deltaTime;
-            if (obstacleSpeed > fastSpeed)
-            {
-                obstacleSpeed = fastSpeed; // 최대 속도 제한
-            }
-        }
-    }
-    else
-    {
-        if (obstacleAcceleration > 0.0f)
-        {
-            obstacleAcceleration -= accelerationIncrement * deltaTime; // 가속도 감소
-        }
-        else
-        {
-            obstacleAcceleration = 0.0f;
-        }
-        if (obstacleSpeed > normalSpeed)
-        {
-            obstacleSpeed -= accelerationIncrement * deltaTime; // 가속도 감소가 아니라 직접적으로 속도를 줄여야 합니다.
-            if (obstacleSpeed < normalSpeed)
-            {
-                obstacleSpeed = normalSpeed; // 최소 속도 제한
-            }
+        // 지면에 닿으면 점프 멈춤
+        if (player.y - player.height / 2 <= ground.y + ground.height / 2) {
+            player.y = ground.y + ground.height / 2 + player.height / 2;
+            isJumping = false;
+            playerVelocityY = 0.0f;
+            player.rotationAngle = 0.0f; // 땅에 닿으면 회전 각도 초기화
         }
     }
 }
 
-bool checkCollision()
-{
-    float playerLeft = -0.875f;
-    float playerRight = playerLeft + playerSize; // 50cm 정사각형의 오른쪽 경계
-    float playerTop = PlayerY + playerSize; // 50cm 정사각형의 위쪽 경계
-    float playerBottom = PlayerY;
-
-    // 낮은 장애물
-    float lowObstacleTop = -1.0f + groundHeight + 0.1f; // 낮은 장애물 높이
-
-    // 높은 장애물
-    float highObstacleTop = -1.0f + groundHeight + 0.3f; // 높은 장애물 높이
-
-    // 낮은 장애물과의 충돌 검사
-    bool collisionWithLowObstacle1 = (playerRight >= lowObstacleX1 && playerLeft <= lowObstacleX1 + 0.05f &&
-        playerTop >= -1.0f + groundHeight && playerBottom <= lowObstacleTop);
-
-    bool collisionWithLowObstacle2 = (playerRight >= lowObstacleX2 && playerLeft <= lowObstacleX2 + 0.05f &&
-        playerTop >= -1.0f + groundHeight && playerBottom <= lowObstacleTop);
-
-    // 높은 장애물과의 충돌 검사
-    bool collisionWithHighObstacle1 = (playerRight >= highObstacleX1 && playerLeft <= highObstacleX1 + 0.05f &&
-        playerTop >= -1.0f + groundHeight && playerBottom <= highObstacleTop);
-
-    bool collisionWithHighObstacle2 = (playerRight >= highObstacleX2 && playerLeft <= highObstacleX2 + 0.05f &&
-        playerTop >= -1.0f + groundHeight && playerBottom <= highObstacleTop);
-
-    return collisionWithLowObstacle1 || collisionWithLowObstacle2 || collisionWithHighObstacle1 || collisionWithHighObstacle2;
-}
-
-void drawObstacle(float x, float y, float width, float height)
-{
-    glBegin(GL_POLYGON);
-    glColor3f(0.0f, 1.0f, 0.0f); // 녹색
-    glVertex2f(x, y);
-    glVertex2f(x, y + height);
-    glVertex2f(x + width, y + height);
-    glVertex2f(x + width, y);
-    glEnd();
-}
-void obstacles(float deltaTime) {
-    float obstacleWidth = 0.05f; // 50cm
-    float lowObstacleHeight = 0.1f; // 100cm
-    float highObstacleHeight = 0.3f; // 300cm
-
-    // 장애물 그리기
-    drawObstacle(lowObstacleX1, -1.0f + groundHeight, obstacleWidth, lowObstacleHeight); // 지면 위에 그리기
-    drawObstacle(lowObstacleX2, -1.0f + groundHeight, obstacleWidth, lowObstacleHeight); // 지면 위에 그리기
-    drawObstacle(highObstacleX1, -1.0f + groundHeight, obstacleWidth, highObstacleHeight); // 지면 위에 그리기
-    drawObstacle(highObstacleX2, -1.0f + groundHeight, obstacleWidth, highObstacleHeight); // 지면 위에 그리기
-
-    // 장애물 이동
-    lowObstacleX1 -= obstacleSpeed * deltaTime;
-    lowObstacleX2 -= obstacleSpeed * deltaTime;
-    highObstacleX1 -= obstacleSpeed * deltaTime;
-    highObstacleX2 -= obstacleSpeed * deltaTime;
-
-    // 장애물이 화면을 벗어나면 반대편에서 나타나도록
-    if (lowObstacleX1 < -1.2f) {
-        lowObstacleX1 = 1.0f;
+void UpdateObstacles(EnemyBlock obstacles[], int obstacleCount, float deltaTime, float ground_y_opengl) {
+    float obstacleSpeed = 1.0f; // 장애물 속도
+    // 각 장애물을 왼쪽으로 이동시킵니다.
+    for (int i = 0; i < obstacleCount; ++i) {
+        obstacles[i].Move(-obstacleSpeed * deltaTime); // 장애물을 왼쪽으로 이동시킵니다.
     }
-    if (lowObstacleX2 < -1.2f) {
-        lowObstacleX2 = 1.0f;
-    }
-    if (highObstacleX1 < -1.2f) {
-        highObstacleX1 = 1.0f;
-    }
-    if (highObstacleX2 < -1.2f) {
-        highObstacleX2 = 1.0f;
+
+    // 화면 밖으로 나간 장애물을 확인하고 재활용합니다.
+    for (int i = 0; i < obstacleCount; ++i) {
+        if (obstacles[i].x + obstacles[i].width / 2 < -1.0f) {
+            // 장애물을 화면 오른쪽 끝으로 다시 이동시킵니다.
+            float heights[2] = { 0.2f, 0.6f }; // 낮고 높은 장애물의 높이
+            float newX = 1.0f + 0.25f * (rand() % 5); // 새로운 x 위치를 무작위로 설정
+            int heightIndex = rand() % 2;
+            float newHeight = heights[heightIndex];
+            float newY = ground_y_opengl + newHeight / 2; // 지면 위에 장애물을 배치
+            obstacles[i] = EnemyBlock(newX, newY, 0.1f, newHeight, 0.0f, 1.0f, 0.0f); // 장애물 재활용
+        }
     }
 }
 
-void Player() {
-    // 플레이어 내부 사각형 (빨간색)
-    glBegin(GL_POLYGON);
-    glColor3f(1.0f, 0.0f, 0.0f);
-    glVertex2f(-0.875f, PlayerY + playerSize);
-    glVertex2f(-0.875f, PlayerY);
-    glVertex2f(-0.875f + playerSize, PlayerY);
-    glVertex2f(-0.875f + playerSize, PlayerY + playerSize);
-    glEnd();
+void UpdateStars(Star stars[], int starCount, float deltaTime) {
+    float starSpeed = 1.0f / 3.0f; // 장애물 속도의 1/3 속도
+    // 각 별을 왼쪽으로 이동시킵니다.
+    for (int i = 0; i < starCount; ++i) {
+        stars[i].Move(-starSpeed * deltaTime); // 별을 왼쪽으로 이동시킵니다.
+    }
 
-    // 플레이어 테두리 (검정색)
-    glLineWidth(3.0f); // 3cm 두께의 테두리
-    glBegin(GL_LINE_LOOP);
-    glColor3f(0.0f, 0.0f, 0.0f);
-    glVertex2f(-0.875f, PlayerY + playerSize);
-    glVertex2f(-0.875f, PlayerY);
-    glVertex2f(-0.875f + playerSize, PlayerY);
-    glVertex2f(-0.875f + playerSize, PlayerY + playerSize);
-    glEnd();
+    // 화면 밖으로 나간 별을 확인하고 재활용합니다.
+    for (int i = 0; i < starCount; ++i) {
+        if (stars[i].x + stars[i].width / 2 < -1.0f) {
+            // 별을 화면 오른쪽 끝으로 다시 이동시킵니다.
+            float newX = 1.0f + 0.25f * (rand() % 5); // 새로운 x 위치를 무작위로 설정
+            float newY = 0.5f + 0.5f * (rand() % 100) / 100.0f; // 새로운 y 위치를 무작위로 설정
+            stars[i] = Star(newX, newY, stars[i].size); // 별 재활용
+        }
+    }
 }
 
-void ground() {
-    glBegin(GL_POLYGON);
-    glColor3f(1.0f, 0.784f, 0.0588f); // RGB(255, 200, 15)
-    glVertex2f(-1.0f, -1.0f + groundHeight); // 100cm를 고려하여 지면 높이 설정
-    glVertex2f(-1.0f, -1.0f);
-    glVertex2f(1.0f, -1.0f);
-    glVertex2f(1.0f, -1.0f + groundHeight);
-    glEnd();
-}
+int main(void) {
+    _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 
-void render() {
-    ground();
-    Player();
-    obstacles(0); // 0은 초기화된 deltaTime 값
-}
-
-int main()
-{
-    GLFWwindow* window;
-
+    // GLFW 라이브러리 초기화
     if (!glfwInit())
         return -1;
 
-    window = glfwCreateWindow(800, 600, "Google Dino Run Copy Game", NULL, NULL);
-    if (!window)
-    {
+    GLFWwindow* window;
+    window = glfwCreateWindow(WIDTH, HEIGHT, "Google Dino Run Copy Game", NULL, NULL);
+
+    if (!window) {
         glfwTerminate();
         return -1;
     }
 
+    glfwMakeContextCurrent(window);
     glfwSetErrorCallback(errorCallback);
     glfwSetKeyCallback(window, keyCallback);
 
-    /* Make the window's context current */
-    glfwMakeContextCurrent(window);
+    // 초기 위치 설정
+    float x_meter = 5.0f; // 지면에서 50cm 오른쪽으로 이동
+    float y_meter = 12.0f; // 지면에서 1m 위에 위치
 
-    auto previousTime = std::chrono::high_resolution_clock::now(); // 현재 시간 가져오기
+    float x_pixel = meterToPixel(x_meter);
+    float y_pixel = meterToPixel(y_meter);
 
-    seed = static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()); // 랜덤 시드 초기화
+    float x_opengl = pixelToOpenGL(x_pixel, WIDTH);
+    float y_opengl = pixelToOpenGL(y_pixel, HEIGHT);
 
-    while (!glfwWindowShouldClose(window))
-    {
-        auto currentTime = std::chrono::high_resolution_clock::now(); // 현재 시간 가져오기
-        std::chrono::duration<float> deltaTime = currentTime - previousTime; // 경과 시간 계산
-        previousTime = currentTime; // 이전 시간 갱신
+    // 사각형의 크기
+    const float square_size_meter = 5.0f; // 50cm = 5m
+    const float border_thickness_meter = 0.3f; // 3cm = 0.3m
+    float square_size_opengl = 2.0f * meterToPixel(square_size_meter) / WIDTH; // OpenGL 좌표로 변환
+    float border_thickness_opengl = 2.0f * meterToPixel(border_thickness_meter) / WIDTH; // OpenGL 좌표로 변환
+
+    // 화면 비율
+    float aspectRatio = (float)WIDTH / (float)HEIGHT;
+
+    // 지면의 y 위치
+    float ground_y_meter = 10.0f; // 100cm = 10m
+    float ground_y_pixel = meterToPixel(ground_y_meter);
+    float ground_y_opengl = pixelToOpenGL(ground_y_pixel, HEIGHT);
+
+    // 객체 생성
+    player = Player(x_opengl, y_opengl, square_size_opengl, square_size_opengl, 1.0f, 0.0f, 0.0f); // 전역 변수로 선언된 player 객체 초기화
+    Floor ground(0.0f, ground_y_opengl - 1.0f, 4.0f, 2.0f, 1.0f, 0.78f, 0.06f); // 너비를 4.0으로 설정하여 지면을 늘림
+
+    // 장애물 생성
+    EnemyBlock obstacles[MAX_OBSTACLES];
+    int obstacleCount = MAX_OBSTACLES;
+    float obstacle_width_opengl = 2.0f * meterToPixel(5.0f) / WIDTH; // 50cm = 5m
+    float obstacle_height_low_opengl = 2.0f * meterToPixel(10.0f) / HEIGHT; // 100cm = 10m
+    float obstacle_height_high_opengl = 2.0f * meterToPixel(30.0f) / HEIGHT; // 300cm = 30m
+
+    obstacles[0] = EnemyBlock(0.75f, ground_y_opengl + obstacle_height_low_opengl / 2, obstacle_width_opengl, obstacle_height_low_opengl, 0.0f, 1.0f, 0.0f);
+    obstacles[1] = EnemyBlock(1.25f, ground_y_opengl + obstacle_height_high_opengl / 2, obstacle_width_opengl, obstacle_height_high_opengl, 0.0f, 1.0f, 0.0f);
+
+    // 별 생성
+    Star stars[MAX_STARS];
+    int starCount = MAX_STARS;
+
+    for (int i = 0; i < starCount; ++i) {
+        float newX = -1.0f + 2.0f * (rand() % 100) / 100.0f; // x 위치를 무작위로 설정
+        float newY = 0.5f + 0.5f * (rand() % 100) / 100.0f; // y 위치를 무작위로 설정 (화면 위쪽에 위치하도록 설정)
+        stars[i] = Star(newX, newY, 0.05f); // 별 초기화
+    }
+
+    glfwSetFramebufferSizeCallback(window, reshape);
+    reshape(window, WIDTH, HEIGHT);
+
+    float lastTime = glfwGetTime();
+    while (!glfwWindowShouldClose(window)) {
+        float currentTime = glfwGetTime();
+        float deltaTime = currentTime - lastTime;
+        lastTime = currentTime;
+
+        // 배경색을 (R:0, G:30, B:100)로 설정
+        glClearColor(0.0f, 30.0f / 255.0f, 100.0f / 255.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT); // 프레임 버퍼를 지우는 함수 호출
 
         glfwPollEvents();
-        glClearColor(0.0f, 0.1176f, 0.3922f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
 
-        if (!isCollision) {
-            isCollision = checkCollision();
-        }
-        updateObstacleSpeed(deltaTime.count());
-        obstacles(deltaTime.count());
-        PlayerMove(deltaTime.count());
+        // 물리 적용
+        ApplyPhysics(player, ground, deltaTime);
 
-        if (isCollision) {
-            obstacleSpeed = 0.0f; // 충돌 시 장애물 멈춤
+        // 장애물 업데이트
+        UpdateObstacles(obstacles, obstacleCount, deltaTime, ground_y_opengl);
+
+        // 별 업데이트
+        UpdateStars(stars, starCount, deltaTime);
+
+        // 충돌 검사
+        for (int i = 0; i < obstacleCount; ++i) {
+            if (PhysicsAABB(player, obstacles[i])) {
+                // 충돌이 발생하면 창을 닫음
+                glfwSetWindowShouldClose(window, GLFW_TRUE);
+            }
         }
-        render();
+
+        // 객체 그리기
+        ground.Draw();
+        player.Draw(border_thickness_opengl);
+        for (int i = 0; i < obstacleCount; ++i) {
+            obstacles[i].Draw();
+        }
+
+        // 별 그리기
+        for (int i = 0; i < starCount; ++i) {
+            stars[i].Draw();
+        }
+
+        // 버퍼를 교체하여 화면에 그립니다.
         glfwSwapBuffers(window);
     }
+
     glfwTerminate();
     return 0;
 }
