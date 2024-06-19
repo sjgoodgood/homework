@@ -17,16 +17,19 @@ const int MAX_STARS = 5; // 별 수
 const float GRAVITY = -9.8f; // 중력 가속도
 
 // 플레이어 점프 속도
-const float MAX_JUMP_FORCE = 15.0f;
+const float JUMP_FORCE = 5.0f; // 고정된 점프 힘
+const float FALL_SPEED_MODIFIER = 0.5f; // 낙하 속도 조절
 
 // 플레이어 상태
 bool isJumping = false;
-float playerVelocityY = 0.0f;
-double spacebarPressedTime = 0.0;
 bool spacebarHeld = false;
+float playerVelocityY = 0.0f;
 
 // 전역 변수로 플레이어 선언
 Player player(0.0f, 0.0f, 0.1f, 0.1f, 1.0f, 0.0f, 0.0f);
+
+// 장애물 초기 크기 저장
+float obstacleInitialHeights[MAX_OBSTACLES];
 
 // 미터 좌표를 픽셀 좌표로 변환하는 함수
 float meterToPixel(float meter) {
@@ -43,18 +46,16 @@ void errorCallback(int error, const char* description) {
 }
 
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS && !isJumping) {
-        spacebarPressedTime = glfwGetTime();
-        spacebarHeld = true;
-    }
-    if (key == GLFW_KEY_SPACE && action == GLFW_RELEASE && !isJumping) {
-        double spacebarReleasedTime = glfwGetTime();
-        double heldTime = spacebarReleasedTime - spacebarPressedTime;
-        float jumpForce = (heldTime * 15.0f < MAX_JUMP_FORCE) ? (heldTime * 15.0f) : MAX_JUMP_FORCE;  // 최대 점프력을 제한
-        playerVelocityY = jumpForce;
-        isJumping = true;
-        spacebarHeld = false;
-        player.rotationSpeed = -180.0f / (2 * jumpForce / -GRAVITY); // 점프 동안 180도 반대 방향으로 회전
+    if (key == GLFW_KEY_SPACE) {
+        if (action == GLFW_PRESS && !isJumping) {
+            playerVelocityY = JUMP_FORCE;
+            isJumping = true;
+            spacebarHeld = true;
+            player.rotationSpeed = -180.0f / (2 * JUMP_FORCE / -GRAVITY); // 점프 동안 180도 반대 방향으로 회전
+        }
+        if (action == GLFW_RELEASE) {
+            spacebarHeld = false;
+        }
     }
 }
 
@@ -94,7 +95,13 @@ void reshape(GLFWwindow* window, int width, int height) {
 
 void ApplyPhysics(Player& player, Floor& ground, float deltaTime) {
     if (isJumping) {
-        playerVelocityY += GRAVITY * deltaTime; // 중력 가속도 적용 
+        if (spacebarHeld) {
+            playerVelocityY += (GRAVITY * FALL_SPEED_MODIFIER) * deltaTime; // 느린 낙하 속도 적용
+        }
+        else {
+            playerVelocityY += GRAVITY * deltaTime; // 중력 가속도 적용 
+        }
+
         player.y += playerVelocityY * deltaTime; // y 위치 업데이트
         player.rotationAngle += player.rotationSpeed * deltaTime; // 회전 각도 업데이트
 
@@ -117,14 +124,11 @@ void UpdateObstacles(EnemyBlock obstacles[], int obstacleCount, float deltaTime,
 
     // 화면 밖으로 나간 장애물을 확인하고 재활용합니다.
     for (int i = 0; i < obstacleCount; ++i) {
-        if (obstacles[i].x + obstacles[i].width / 2 < -1.0f) {
+        if (obstacles[i].x + obstacles[i].width / 2 < -1.5f) {
             // 장애물을 화면 오른쪽 끝으로 다시 이동시킵니다.
-            float heights[2] = { 0.2f, 0.6f }; // 낮고 높은 장애물의 높이
             float newX = 1.0f + 0.25f * (rand() % 5); // 새로운 x 위치를 무작위로 설정
-            int heightIndex = rand() % 2;
-            float newHeight = heights[heightIndex];
-            float newY = ground_y_opengl + newHeight / 2; // 지면 위에 장애물을 배치
-            obstacles[i] = EnemyBlock(newX, newY, 0.1f, newHeight, 0.0f, 1.0f, 0.0f); // 장애물 재활용
+            float newY = ground_y_opengl + obstacleInitialHeights[i] / 2; // 저장된 초기 높이를 사용하여 장애물을 배치
+            obstacles[i] = EnemyBlock(newX, newY, obstacles[i].width, obstacleInitialHeights[i], obstacles[i].r, obstacles[i].g, obstacles[i].b); // 장애물 재활용
         }
     }
 }
@@ -138,7 +142,7 @@ void UpdateStars(Star stars[], int starCount, float deltaTime) {
 
     // 화면 밖으로 나간 별을 확인하고 재활용합니다.
     for (int i = 0; i < starCount; ++i) {
-        if (stars[i].x + stars[i].width / 2 < -1.0f) {
+        if (stars[i].x + stars[i].width / 2 < -1.5f) {
             // 별을 화면 오른쪽 끝으로 다시 이동시킵니다.
             float newX = 1.0f + 0.25f * (rand() % 5); // 새로운 x 위치를 무작위로 설정
             float newY = 0.5f + 0.5f * (rand() % 100) / 100.0f; // 새로운 y 위치를 무작위로 설정
@@ -200,6 +204,12 @@ int main(void) {
     float obstacle_width_opengl = 2.0f * meterToPixel(5.0f) / WIDTH; // 50cm = 5m
     float obstacle_height_low_opengl = 2.0f * meterToPixel(10.0f) / HEIGHT; // 100cm = 10m
     float obstacle_height_high_opengl = 2.0f * meterToPixel(30.0f) / HEIGHT; // 300cm = 30m
+
+    // 장애물의 초기 크기 설정
+    float initialHeights[2] = { obstacle_height_low_opengl, obstacle_height_high_opengl };
+    for (int i = 0; i < obstacleCount; ++i) {
+        obstacleInitialHeights[i] = initialHeights[i % 2];
+    }
 
     obstacles[0] = EnemyBlock(0.75f, ground_y_opengl + obstacle_height_low_opengl / 2, obstacle_width_opengl, obstacle_height_low_opengl, 0.0f, 1.0f, 0.0f);
     obstacles[1] = EnemyBlock(1.25f, ground_y_opengl + obstacle_height_high_opengl / 2, obstacle_width_opengl, obstacle_height_high_opengl, 0.0f, 1.0f, 0.0f);
